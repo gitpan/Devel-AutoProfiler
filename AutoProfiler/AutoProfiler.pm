@@ -22,7 +22,7 @@ require 5.005_62;
 use strict;
 use warnings;
 
-our $VERSION = '1.100';
+our $VERSION = '1.200';
 
 use Data::Dumper;
 use Time::HiRes qw( usleep ualarm gettimeofday tv_interval );
@@ -221,7 +221,7 @@ BEGIN
 
 ###########################################################################
 ###########################################################################
-sub BEGIN
+BEGIN
 ###########################################################################
 ###########################################################################
 {
@@ -240,7 +240,7 @@ sub BEGIN
 
 ###########################################################################
 ###########################################################################
-sub INIT
+INIT
 ###########################################################################
 ###########################################################################
 {
@@ -422,20 +422,22 @@ sub by_total_time
   return $a->{total_time_in_sub} <=> $b->{total_time_in_sub}; 
 }
 
-sub END
+sub default_end
 {
-  # print Dumper \%Devel::AutoProfiler::caller_info;
+  my (%caller_info) = @_;
 
-  my @keys = keys(%Devel::AutoProfiler::caller_info);
+  # print Dumper \%caller_info;
+
+  my @keys = keys(%caller_info);
 
   foreach my $key (@keys)
     {
-      my $href = $Devel::AutoProfiler::caller_info{$key};
+      my $href = $caller_info{$key};
 
       $href->{who_am_i} = $key;
     }
 
-  my @subs = values(%Devel::AutoProfiler::caller_info);
+  my @subs = values(%caller_info);
 
 
   my @sorted = sort by_total_time ( @subs );
@@ -452,6 +454,31 @@ sub END
 
   print Dumper \@readable_info;
 }
+
+
+my $default_command = \&default_end;
+
+sub import
+{
+	my ($inv, %args) = @_;
+
+	if(exists($args{-command}))
+		{
+		my $cmd = $args{-command};
+		unless(ref($cmd) eq 'CODE')
+			{
+			die "Error: -command must be a code ref when using AutoProfiler";
+			}
+
+		$default_command = $cmd;
+		}
+}
+
+END
+{
+	&$default_command(%Devel::AutoProfiler::caller_info);
+}
+
 
 1;
 
@@ -490,7 +517,7 @@ __END__
 
   i.e.
 
-      use DoNotProfile;
+      use ThisModuleWillNotBeProfiled;
 
       use Devel::AutoProfiler;
 
@@ -499,6 +526,30 @@ __END__
   When the program completes, the AutoProfiler module will
   automatically print out information about all subroutines that
   were profiled.
+
+  You can supply a callback which will be called at END time.
+  This code reference will be passed a hash containing all the
+  caller information in the form of a hash. Your callback routine
+  can the do whatever it wishes with this information.
+
+	use Data::Dumper;
+	use Devel::AutoProfiler
+		( 
+		-command => sub
+			{
+			my (%data) = @_;
+	
+			print "this format provided by user callback \n";
+	
+			print Dumper \%data;
+			}
+		);
+
+  If you do not supply a callback command, AutoProfiler prints out
+  the caller information in reverse order by total time spent in
+  a particular subroutine. This means that at the end of execution,
+  all the information is printed out, and the last item listed uses
+  the most processor time during execution.
 
 =head2 EXPORT
 
@@ -516,8 +567,8 @@ __END__
 	make test
 	make install
 
-  There are two sample scripts in the tarball that you can play with to
-  view how AutoProfiler works: test.pl and wantarray.pl
+  There are some sample scripts in the tarball that you can play with to
+  view how AutoProfiler works: test.pl, wantarray.pl, and callback.pl
 
 
 =head1 AUTHOR
